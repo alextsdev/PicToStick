@@ -1,0 +1,214 @@
+<div class="w-full flex flex-col items-center gap-4 p-4 max-w-md mx-auto">
+  <input type="file" id="fileInput" accept="image/*"
+    class="p-2 border rounded w-full focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+
+  <input type="text" id="topText" placeholder="Texto arriba"
+    class="p-2 border rounded w-full focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+
+  <input type="text" id="bottomText" placeholder="Texto abajo"
+    class="p-2 border rounded w-full focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+
+  <div class="flex flex-col gap-3 w-full">
+    <label class="flex items-center justify-between">
+      <span class="font-medium">Color del texto:</span>
+      <input type="color" id="textColor" value="#ffffff" class="color-picker" />
+    </label>
+
+    <label class="flex items-center justify-between gap-2">
+      <span class="font-medium">Borde:</span>
+      <input type="color" id="borderColor" value="#000000" class="color-picker" />
+      <input type="number" id="borderWidth" value="4" min="0" max="20"
+        class="w-16 p-1 border rounded text-sm" />
+    </label>
+
+    <label class="flex justify-between items-center">
+      <span class="font-medium">Tipografía:</span>
+      <select id="fontFamily" class="p-2 border rounded w-32">
+        <option value="sans-serif" selected>Sans Serif</option>
+        <option value="serif">Serif</option>
+        <option value="monospace">Monospace</option>
+        <option value="cursive">Cursive</option>
+      </select>
+    </label>
+  </div>
+
+  <label class="flex items-center gap-2 mt-2 cursor-pointer select-none">
+    <input type="checkbox" id="roundedToggle" class="w-5 h-5" />
+    Sticker circular
+  </label>
+
+  <div class="relative w-full">
+    <canvas id="stickerCanvas" class="mx-auto shadow-lg border border-gray-200 max-w-full" style="display:none;"></canvas>
+  </div>
+
+  <div class="flex gap-2">
+    <button id="downloadStickerBtn"
+      class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition" style="display:none;">
+      Descargar Sticker
+    </button>
+
+    <button id="copyStickerBtn"
+      class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition flex items-center justify-center"
+      style="display:none;" title="Copiar al portapapeles">
+      Copiar
+    </button>
+  </div>
+
+</div>
+
+<script>
+const canvas = document.getElementById('stickerCanvas');
+const ctx = canvas.getContext('2d');
+
+const fileInput = document.getElementById('fileInput');
+const topTextInput = document.getElementById('topText');
+const bottomTextInput = document.getElementById('bottomText');
+const textColorInput = document.getElementById('textColor');
+const borderColorInput = document.getElementById('borderColor');
+const fontFamilyInput = document.getElementById('fontFamily');
+const borderWidthInput = document.getElementById('borderWidth');
+const roundedToggle = document.getElementById('roundedToggle');
+const downloadBtn = document.getElementById('downloadStickerBtn');
+const copyBtn = document.getElementById('copyStickerBtn');
+
+let img = new Image();
+let size = 512;
+
+let texts = [
+  { key: 'top', x: size/2, y: 80, dragging: false },
+  { key: 'bottom', x: size/2, y: size - 60, dragging: false }
+];
+
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { 
+    img.onload = drawSticker;
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+function drawSticker() {
+  if (!img.src) return;
+
+  canvas.width = size;
+  canvas.height = size;
+  ctx.clearRect(0,0,size,size);
+
+  if (roundedToggle.checked) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(size/2, size/2, size/2 - 10, 0, Math.PI*2);
+    ctx.closePath();
+    ctx.clip();
+  }
+
+  ctx.drawImage(img, 0, 0, size, size);
+  if (roundedToggle.checked) ctx.restore();
+
+  const stickerBorderWidth = 15;
+  if (stickerBorderWidth > 0) {
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = stickerBorderWidth;
+    if (roundedToggle.checked) {
+      ctx.beginPath();
+      ctx.arc(size/2, size/2, size/2 - stickerBorderWidth/2, 0, Math.PI*2);
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(0, 0, size, size);
+    }
+  }
+
+  texts.forEach(t => {
+    const text = t.key === 'top' ? topTextInput.value : bottomTextInput.value;
+    if (!text) return;
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = textColorInput.value;
+
+    let fontSize = 48;
+    ctx.font = `bold ${fontSize}px ${fontFamilyInput.value}`;
+    while(ctx.measureText(text).width > size - 40 && fontSize > 10) {
+      fontSize -= 2;
+      ctx.font = `bold ${fontSize}px ${fontFamilyInput.value}`;
+    }
+
+    const lineWidth = Math.min(parseInt(borderWidthInput.value), 20);
+    if (lineWidth > 0) {
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = borderColorInput.value;
+      ctx.strokeText(text, t.x, t.y);
+    }
+
+    ctx.fillText(text, t.x, t.y);
+  });
+
+  canvas.style.display = 'block';
+  downloadBtn.style.display = 'inline-block';
+  copyBtn.style.display = 'inline-block';
+}
+
+[topTextInput, bottomTextInput, textColorInput, borderColorInput, fontFamilyInput, borderWidthInput, roundedToggle].forEach(input => {
+  input.addEventListener('input', drawSticker);
+});
+
+downloadBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = 'sticker.png';
+  link.click();
+});
+
+copyBtn.addEventListener('click', async () => {
+  try {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const file = new ClipboardItem({ 'image/png': blob });
+    await navigator.clipboard.write([file]);
+    alert('Sticker copiado al portapapeles. \nPuedes pegarlo en WhatsApp Web.');
+  } catch (err) {
+    console.error(err);
+    alert('No se pudo copiar. Usa el botón de descarga.');
+  }
+});
+
+function resizeCanvas() {
+  const container = canvas.parentElement;
+  const scale = Math.min(container.clientWidth / canvas.width, 1);
+  canvas.style.width = `${canvas.width * scale}px`;
+  canvas.style.height = `${canvas.height * scale}px`;
+}
+window.addEventListener('resize', resizeCanvas);
+setInterval(resizeCanvas, 100);
+
+let draggingText = null;
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+  texts.forEach(t => {
+    const text = t.key === 'top' ? topTextInput.value : bottomTextInput.value;
+    ctx.font = `bold 48px ${fontFamilyInput.value}`;
+    const w = ctx.measureText(text).width;
+    const h = 48;
+    if (mx > t.x - w/2 && mx < t.x + w/2 && my > t.y - h && my < t.y) {
+      t.dragging = true;
+      draggingText = t;
+    }
+  });
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!draggingText) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+  draggingText.x = mx;
+  draggingText.y = my;
+  drawSticker();
+});
+
+canvas.addEventListener('mouseup', () => { draggingText = null; texts.forEach(t => t.dragging = false); });
+canvas.addEventListener('mouseleave', () => { draggingText = null; texts.forEach(t => t.dragging = false); });
+</script>
